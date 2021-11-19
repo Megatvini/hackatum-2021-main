@@ -5,13 +5,23 @@ import "./interfaces/IBank.sol";
 import "./interfaces/IPriceOracle.sol";
 
 contract Bank is IBank {
+    address priceOracle;
+    address hakToken;
 
-    constructor(address _priceOracle, address _hakToken) {}
-    function deposit(address token, uint256 amount)
-        payable
-        external
-        override
-        returns (bool) {}
+    constructor(address _priceOracle, address _hakToken) {
+        priceOracle = _priceOracle;
+        hakToken = _hakToken;
+    }
+
+    function deposit(address token, uint256 amount) payable external override returns (bool) {
+            if (token == 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE) {
+                return true;
+            } else if (token == hakToken) {
+                return true;
+            } else {
+                revert("token not supported");
+            }
+        }
 
     function withdraw(address token, uint256 amount)
         external

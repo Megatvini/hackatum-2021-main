@@ -172,7 +172,7 @@ contract Bank is IBank {
         addBalance(ethLoan, amount, block.number);
 
         totalHakDeposited = getTotalBalance(hakDeposits[msg.sender], block.number);
-        uint256 newCollateralRatio = totalHakDeposited * hakPriceInWei / getTotalBalance(ethLoans[msg.sender], block.number) / 100_000_000_000_000;
+        uint256 newCollateralRatio = totalHakDeposited * hakPriceInWei * 10_000 / (ethLoan.balance + ethLoan.interest) / WEI_MULT;
 
         msg.sender.transfer(amount / WEI_MULT);
         emit Borrow(msg.sender, token, amount / WEI_MULT, newCollateralRatio);
@@ -180,11 +180,49 @@ contract Bank is IBank {
         return newCollateralRatio;
     }
 
-    function repay(address token, uint256 amount)
-    payable
-    external
-    override
-    returns (uint256) {}
+    function repay(address token, uint256 amount) payable external override returns (uint256) {
+        if (token != ethToken) {
+            revert("token not supported");
+        }
+
+        if (msg.value < amount) {
+            revert("msg.value < amount to repay");
+        }
+
+        amount = msg.value * WEI_MULT;
+        uint256 startingAmount = amount;
+
+        CurrencyBalance storage ethBalance = ethLoans[msg.sender];
+
+        if (getTotalBalance(ethBalance, block.number) == 0) {
+            revert("nothing to repay");
+        }
+
+        updateCurrencyInterest(ethBalance, block.number);
+
+        if (amount >= ethBalance.interest) {
+            amount -= ethBalance.interest;
+            ethBalance.interest = 0;
+        } else {
+            ethBalance.interest -= amount;
+            amount = 0;
+        }
+
+        if (amount >= ethBalance.balance) {
+            ethBalance.balance = 0;
+        } else {
+            ethBalance.balance -= amount;
+        }
+
+        uint256 hakPriceInWei = IPriceOracle(priceOracle).getVirtualPrice(hakToken);
+        uint256 totalPayedInHak = (startingAmount - amount) / hakPriceInWei;
+        uint256 collateralToFree = hakCollaterals[msg.sender] <= totalPayedInHak ? hakCollaterals[msg.sender]: totalPayedInHak;
+
+        hakCollaterals[msg.sender] -= collateralToFree;
+
+        emit Repay(msg.sender, token, (ethBalance.balance) / WEI_MULT);
+        return (ethBalance.balance) / WEI_MULT;
+    }
 
     function liquidate(address token, address account)
     payable
@@ -205,7 +243,7 @@ contract Bank is IBank {
             return type(uint256).max;
         } 
 
-        return totalHakDepositedWei * hakPriceInWei / totalEthBorrowedWei / 100_000_000_000_000;
+        return totalHakDepositedWei * hakPriceInWei * 10_000 / totalEthBorrowedWei / WEI_MULT;
     }
 
     function getBalance(address token) view public override returns (uint256) {

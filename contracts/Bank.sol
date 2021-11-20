@@ -224,15 +224,40 @@ contract Bank is IBank {
         return (ethBalance.balance) / WEI_MULT;
     }
 
-    function liquidate(address token, address account)
-    payable
-    external
-    override
-    returns (bool) {}
+    function liquidate(address token, address account) payable external override returns (bool) {
+        if (token != hakToken) {
+            revert("token not supported");
+        }
+
+        if (account == msg.sender) {
+            revert("cannot liquidate own position");
+        }
+
+        if (getCollateralRatio(token, account) >= 15000) {
+            revert("healty position");
+        }
+
+        uint256 collateralToReturn = getTotalBalance(hakDeposits[account], block.number);
+        uint256 hakPriceInWei = IPriceOracle(priceOracle).getVirtualPrice(hakToken); 
+
+        uint256 ethNeeded = hakPriceInWei * collateralToReturn / WEI_MULT / WEI_MULT;
+
+        if (ethNeeded > msg.value) {
+            revert("insufficient ETH sent by liquidator");
+        }
+
+        IERC20(hakToken).approve(msg.sender, collateralToReturn / WEI_MULT);
+
+        uint256 amountSentBack = msg.value - ethNeeded; // + getTotalBalance(ethDeposits[account], block.number);
+        msg.sender.transfer(amountSentBack / WEI_MULT);
+
+        emit Liquidate(msg.sender, account, hakToken, collateralToReturn / WEI_MULT, amountSentBack / WEI_MULT);
+        return true;
+    }
 
     function getCollateralRatio(address token, address account) view public override returns (uint256) {
         if (token != hakToken) {
-            revert("Only know ETH collateral");
+            revert("Only know HAK collateral");
         }
 
         uint256 hakPriceInWei = IPriceOracle(priceOracle).getVirtualPrice(hakToken); // * 1_000_000_000_000_000_000

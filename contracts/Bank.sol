@@ -49,7 +49,6 @@ contract Bank is IBank {
 
     function removeBalanceAndInterest(CurrencyBalance storage currency, uint256 amount, uint curBlockNumber) private returns(uint256) {
         updateCurrencyInterest(currency, curBlockNumber);
-        
         uint256 totalRemoved = amount + currency.interest;
         currency.balance -= amount;
         currency.interest = 0;
@@ -64,7 +63,10 @@ contract Bank is IBank {
     function deposit(address token, uint256 amount) payable external override returns (bool) {
         if (token == ethToken) {
             // TODO find out when to revert, amount == 0 ?
-            addBalance(ethDeposits[msg.sender], msg.value <= amount ? msg.value : amount, block.number);
+
+            CurrencyBalance storage currency = ethDeposits[msg.sender];
+            currency.interestRate = 3;
+            addBalance(currency, msg.value <= amount ? msg.value : amount, block.number);
             emit Deposit(msg.sender, token, msg.value);
             return true;
         } else if (token == hakToken) {
@@ -82,6 +84,8 @@ contract Bank is IBank {
                 revert("unsuccessful transfer from");
             }
 
+            CurrencyBalance storage currency = ethDeposits[msg.sender];
+            currency.interestRate = 3;
             addBalance(hakDeposits[msg.sender], amount, block.number);
             emit Deposit(msg.sender, token, amount);
             return true;

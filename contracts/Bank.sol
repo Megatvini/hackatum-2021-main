@@ -12,6 +12,20 @@ contract Bank is IBank {
     address ethToken;
     address selfAddress;
 
+    struct AccountInfo {
+
+        uint256 ethBalances;
+        uint256 ethInterest;
+        uint ethLastBlockNumber;
+
+        uint256 hakBalances;
+        uint256 hakInterest;
+        uint hakLastBlockNumber;
+
+    }
+
+    mapping(address => AccountInfo) accountsInfo;
+
     mapping(address => uint256) ethBalances;
     mapping(address => uint256) ethInterest;
     mapping(address => uint) ethLastBlockNumber;
@@ -19,6 +33,7 @@ contract Bank is IBank {
     mapping(address => uint256) hakBalances;
     mapping(address => uint256) hakInterest;
     mapping(address => uint) hakLastBlockNumber;
+
 
     constructor(address _priceOracle, address payable _hakToken) {
         priceOracle = _priceOracle;
@@ -124,10 +139,15 @@ contract Bank is IBank {
         }
     }
 
-    function borrow(address token, uint256 amount)
-    external
-    override
-    returns (uint256) {}
+    function borrow(address token, uint256 amount) external override returns (uint256) {
+        if (token != ethToken) {
+            revert();
+        }
+
+        uint x = (deposits[account] + accruedInterest[account]) * 10000 / (borrowed[account] + owedInterest[account]) >= 15000;
+
+        return 0;
+    }
 
     function repay(address token, uint256 amount)
     payable

@@ -14,25 +14,17 @@ contract Bank is IBank {
 
     struct AccountInfo {
 
-        uint256 ethBalances;
+        uint256 ethBalance;
         uint256 ethInterest;
         uint ethLastBlockNumber;
 
-        uint256 hakBalances;
+        uint256 hakBalance;
         uint256 hakInterest;
         uint hakLastBlockNumber;
 
     }
 
     mapping(address => AccountInfo) accountsInfo;
-
-    mapping(address => uint256) ethBalances;
-    mapping(address => uint256) ethInterest;
-    mapping(address => uint) ethLastBlockNumber;
-
-    mapping(address => uint256) hakBalances;
-    mapping(address => uint256) hakInterest;
-    mapping(address => uint) hakLastBlockNumber;
 
 
     constructor(address _priceOracle, address payable _hakToken) {
@@ -44,10 +36,10 @@ contract Bank is IBank {
 
     function deposit(address token, uint256 amount) payable external override returns (bool) {
         if (token == ethToken) {
-            ethInterest[msg.sender] = getEthTotalInterest(msg.sender, block.number);
-            ethLastBlockNumber[msg.sender] = block.number;
+            accountsInfo[msg.sender].ethInterest = getEthTotalInterest(msg.sender, block.number);
+            accountsInfo[msg.sender].ethLastBlockNumber = block.number;
             // TODO find out when to revert, amount == 0 ?
-            ethBalances[msg.sender] += msg.value <= amount ? msg.value : amount;
+            accountsInfo[msg.sender].ethBalance += msg.value <= amount ? msg.value : amount;
 
             emit Deposit(msg.sender, token, msg.value);
             return true;
@@ -67,9 +59,9 @@ contract Bank is IBank {
                 revert("unsuccessful transfer from");
             }
 
-            hakInterest[msg.sender] = getHakTotalInterest(msg.sender, block.number);
-            hakLastBlockNumber[msg.sender] = block.number;
-            hakBalances[msg.sender] += amount;
+            accountsInfo[msg.sender].hakInterest = getHakTotalInterest(msg.sender, block.number);
+            accountsInfo[msg.sender].hakLastBlockNumber = block.number;
+            accountsInfo[msg.sender].hakBalance += amount;
 
             emit Deposit(msg.sender, token, amount);
             return true;
@@ -79,55 +71,55 @@ contract Bank is IBank {
     }
 
     function getEthTotalInterest(address customerAddress, uint currentBlockNumber) private view returns (uint256) {
-        return (currentBlockNumber - ethLastBlockNumber[customerAddress]) * 3 * ethBalances[customerAddress] / 10000 + ethInterest[customerAddress];
+        return (currentBlockNumber - accountsInfo[customerAddress].ethLastBlockNumber) * 3 * accountsInfo[customerAddress].ethBalance / 10000 + accountsInfo[customerAddress].ethInterest;
     }
 
     function getHakTotalInterest(address customerAddress, uint currentBlockNumber) private view returns (uint256) {
-        return (currentBlockNumber - hakLastBlockNumber[customerAddress]) * 3 * hakBalances[customerAddress] / 10000 + hakInterest[customerAddress];
+        return (currentBlockNumber - accountsInfo[customerAddress].hakLastBlockNumber) * 3 * accountsInfo[customerAddress].hakBalance / 10000 + accountsInfo[customerAddress].hakInterest;
     }
 
     function withdraw(address token, uint256 amount) external override returns (uint256) {
         if (token == ethToken) {
-            if (ethBalances[msg.sender] == 0) {
+            if (accountsInfo[msg.sender].ethBalance == 0) {
                 revert("no balance");
             }
 
-            if (ethBalances[msg.sender] < amount) {
+            if (accountsInfo[msg.sender].ethBalance < amount) {
                 revert("amount exceeds balance");
             }
 
             if (amount == 0) {
-                amount = ethBalances[msg.sender];
+                amount = accountsInfo[msg.sender].ethBalance;
             }
 
             uint256 totalInterest = getEthTotalInterest(msg.sender, block.number);
 
-            ethLastBlockNumber[msg.sender] = block.number;
-            ethBalances[msg.sender] -= amount;
-            ethInterest[msg.sender] = 0;
+            accountsInfo[msg.sender].ethLastBlockNumber = block.number;
+            accountsInfo[msg.sender].ethBalance -= amount;
+            accountsInfo[msg.sender].ethInterest = 0;
 
             msg.sender.transfer(amount + totalInterest);
             emit Withdraw(msg.sender, token, amount + totalInterest);
 
             return amount + totalInterest;
         } else if (token == hakToken) {
-            if (hakBalances[msg.sender] == 0) {
+            if (accountsInfo[msg.sender].hakBalance == 0) {
                 revert("no balance");
             }
 
-            if (hakBalances[msg.sender] < amount) {
+            if (accountsInfo[msg.sender].hakBalance < amount) {
                 revert("amount exceeds balance");
             }
 
             if (amount == 0) {
-                amount = hakBalances[msg.sender];
+                amount = accountsInfo[msg.sender].hakBalance;
             }
 
             uint256 totalInterest = getHakTotalInterest(msg.sender, block.number);
 
-            hakLastBlockNumber[msg.sender] = block.number;
-            hakBalances[msg.sender] -= amount;
-            hakInterest[msg.sender] = 0;
+            accountsInfo[msg.sender].hakLastBlockNumber = block.number;
+            accountsInfo[msg.sender].hakBalance -= amount;
+            accountsInfo[msg.sender].hakInterest = 0;
 
             IERC20(hakToken).approve(msg.sender, amount + totalInterest);
 
@@ -144,7 +136,7 @@ contract Bank is IBank {
             revert();
         }
 
-        uint x = (deposits[account] + accruedInterest[account]) * 10000 / (borrowed[account] + owedInterest[account]) >= 15000;
+//        uint x = (deposits[account] + accruedInterest[account]) * 10000 / (borrowed[account] + owedInterest[account]) >= 15000;
 
         return 0;
     }
@@ -169,9 +161,9 @@ contract Bank is IBank {
 
     function getBalance(address token) view public override returns (uint256) {
         if (token == ethToken) {
-            return ethBalances[msg.sender] + getEthTotalInterest(msg.sender, block.number);
+            return accountsInfo[msg.sender].ethBalance + getEthTotalInterest(msg.sender, block.number);
         } else if (token == hakToken) {
-            return hakBalances[msg.sender] + getHakTotalInterest(msg.sender, block.number);
+            return accountsInfo[msg.sender].hakBalance + getHakTotalInterest(msg.sender, block.number);
         } else {
             revert("token not supported");
         }

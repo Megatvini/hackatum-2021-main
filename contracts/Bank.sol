@@ -141,28 +141,27 @@ contract Bank is IBank {
             revert("no collateral deposited");
         }
 
-        uint256 totalHakAvailable = totalHakDeposited - hakCollaterals[msg.sender];
-
+        uint256 totalHakAvailable = totalHakDeposited;
         uint256 hakPriceInWei = IPriceOracle(priceOracle).getVirtualPrice(hakToken);
         uint256 maxWeiAvailableToBorrow = hakPriceInWei * totalHakAvailable * 100 / 150 / WEI_MULT ;
+        uint256 totalLoans = getTotalBalance(ethLoans[msg.sender]);
 
         if (amount == 0) {
-            amount = maxWeiAvailableToBorrow;
+            amount = maxWeiAvailableToBorrow - totalLoans;
         }
 
-        if (amount > maxWeiAvailableToBorrow) {
+        if (amount > maxWeiAvailableToBorrow - totalLoans) {
             revert("borrow would exceed collateral ratio");
         }
 
-        uint256 collateralUsed = amount * WEI_MULT * 150 / hakPriceInWei / 100;
-        hakCollaterals[msg.sender] +=  collateralUsed;
+        uint256 newCollateral = (amount + totalLoans) * WEI_MULT * 150 / hakPriceInWei / 100;
+        hakCollaterals[msg.sender] =  newCollateral;
 
         CurrencyBalance storage ethLoan = ethLoans[msg.sender];
         ethLoan.interestRate = 5;
         addBalance(ethLoan, amount);
 
-        totalHakDeposited = getTotalBalance(hakDeposits[msg.sender]);
-        uint256 newCollateralRatio = totalHakDeposited * hakPriceInWei * 10_000 / (ethLoan.balance + ethLoan.interest) / WEI_MULT;
+        uint256 newCollateralRatio = getCollateralRatio(hakToken, msg.sender);
 
         msg.sender.transfer(amount / WEI_MULT);
         emit Borrow(msg.sender, token, amount / WEI_MULT, newCollateralRatio);

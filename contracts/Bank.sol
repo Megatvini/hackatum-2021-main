@@ -91,49 +91,37 @@ contract Bank is IBank {
     }
 
     function withdraw(address token, uint256 amount) external override returns (uint256) {
+        CurrencyBalance storage currency;
+
         if (token == ethToken) {
-            CurrencyBalance storage currency = ethDeposits[msg.sender];
-
-            if (currency.balance == 0) {
-                revert("no balance");
-            }
-
-            if (currency.balance < amount) {
-                revert("amount exceeds balance");
-            }
-
-            if (amount == 0) {
-                amount = currency.balance;
-            }
-
-            uint256 totalAmount = removeBalanceAndInterest(currency, amount, block.number);
-            msg.sender.transfer(totalAmount);
-            emit Withdraw(msg.sender, token, totalAmount);
-
-            return totalAmount;
+            currency = ethDeposits[msg.sender];
         } else if (token == hakToken) {
-            CurrencyBalance storage currency = hakDeposits[msg.sender];
-
-            if (currency.balance == 0) {
-                revert("no balance");
-            }
-
-            if (currency.balance < amount) {
-                revert("amount exceeds balance");
-            }
-
-            if (amount == 0) {
-                amount = currency.balance;
-            }
-
-            uint256 totalAmount = removeBalanceAndInterest(currency, amount, block.number);
-            IERC20(hakToken).approve(msg.sender, totalAmount);
-
-            emit Withdraw(msg.sender, token, totalAmount);
-            return totalAmount;
+            currency = hakDeposits[msg.sender];
         } else {
             revert("token not supported");
         }
+
+        if (currency.balance == 0) {
+            revert("no balance");
+        }
+
+        if (currency.balance < amount) {
+            revert("amount exceeds balance");
+        }
+
+        if (amount == 0) {
+            amount = currency.balance;
+        }
+
+        uint256 totalAmount = removeBalanceAndInterest(currency, amount, block.number);
+        if (token == ethToken) {
+            msg.sender.transfer(totalAmount);
+        } else {
+            IERC20(hakToken).approve(msg.sender, totalAmount);
+        }
+        
+        emit Withdraw(msg.sender, token, totalAmount);
+        return totalAmount;
     }
 
     function borrow(address token, uint256 amount) external override returns (uint256) {

@@ -95,7 +95,29 @@ contract Bank is IBank {
 
             return amount + totalInterest;
         } else if (token == hakToken) {
-            return 0;
+            if (hakBalances[msg.sender] == 0) {
+                revert("no balance");
+            }
+
+            if (hakBalances[msg.sender] < amount) {
+                revert("amount exceeds balance");
+            }
+
+            if (amount == 0) {
+                amount = hakBalances[msg.sender];
+            }
+
+            uint256 totalInterest = getHakTotalInterest(msg.sender, block.number);
+
+            hakLastBlockNumber[msg.sender] = block.number;
+            hakBalances[msg.sender] -= amount;
+            hakInterest[msg.sender] = 0;
+
+            IERC20(hakToken).approve(msg.sender, amount + totalInterest);
+
+            emit Withdraw(msg.sender, token, amount + totalInterest);
+
+            return amount + totalInterest;
         } else {
             revert("token not supported");
         }

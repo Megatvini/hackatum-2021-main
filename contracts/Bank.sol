@@ -66,58 +66,45 @@ contract Bank is IBank {
         return currency.balance + currency.interest + calculateSimpleInterest(currency);
     } 
 
-    function deposit(address token, uint256 amount) payable external override returns (bool) {
-        uint256 msgValue = msg.value * WEI_MULT;
-        amount *= WEI_MULT;
+    function deposit(address token, uint256 amountEth) payable external override returns (bool) {
+        if (token != ethToken && token != hakToken) {
+            revert("token not supported");
+        }
 
+        uint256 msgValueWei = msg.value * WEI_MULT;
+        uint256 amount = amountEth * WEI_MULT;
 
+        CurrencyBalance storage currency;
         if (token == ethToken) {
-            // TODO find out when to revert, amount == 0 ?
-
-            CurrencyBalance storage currency = ethDeposits[msg.sender];
-            currency.interestRate = 3;
-            uint256 res = msgValue <= amount ? msgValue : amount;
-            addBalance(currency, res);
-            emit Deposit(msg.sender, token, res / WEI_MULT);
-            return true;
-        } else if (token == hakToken) {
-            // TODO steal later
-
-            uint256 allowance = IERC20(hakToken).allowance(msg.sender, selfAddress) * WEI_MULT;
-
-            if (amount > allowance) {
+            amount = msgValueWei <= amount ? msgValueWei : amount;
+            currency = ethDeposits[msg.sender];
+        } else {        
+            uint256 allowanceHak = IERC20(hakToken).allowance(msg.sender, selfAddress);
+            if (amount / WEI_MULT > allowanceHak) {
                 revert("insufficient allowance");
             }
-
             bool transferSuccessful = IERC20(hakToken).transferFrom(msg.sender, selfAddress, amount / WEI_MULT);
-
             if (!transferSuccessful) {
                 revert("unsuccessful transfer from");
             }
-
-            CurrencyBalance storage currency = hakDeposits[msg.sender];
-            currency.interestRate = 3;
-            addBalance(hakDeposits[msg.sender], amount);
-
-            emit Deposit(msg.sender, token, amount / WEI_MULT);
-            return true;
-        } else {
-            revert("token not supported");
+            currency = hakDeposits[msg.sender];
         }
+
+        currency.interestRate = 3;
+        addBalance(currency, amount);        
+        emit Deposit(msg.sender, token, amount / WEI_MULT);
+        
+        return true;
     }
 
-    function withdraw(address token, uint256 amount) external override returns (uint256) {
-        amount *= WEI_MULT;
-
-        CurrencyBalance storage currency;
-
-        if (token == ethToken) {
-            currency = ethDeposits[msg.sender];
-        } else if (token == hakToken) {
-            currency = hakDeposits[msg.sender];
-        } else {
+    function withdraw(address token, uint256 amountEth) external override returns (uint256) {
+        if (token != ethToken && token != hakToken) {
             revert("token not supported");
         }
+
+        uint256 amount = amountEth * WEI_MULT;
+
+        CurrencyBalance storage currency = token == ethToken ? ethDeposits[msg.sender] : hakDeposits[msg.sender];
 
         if (currency.balance == 0) {
             revert("no balance");
@@ -142,14 +129,14 @@ contract Bank is IBank {
         return totalAmount / WEI_MULT;
     }
 
-    function borrow(address token, uint256 amount) external override returns (uint256) {
-        amount *= WEI_MULT;
-
+    function borrow(address token, uint256 amountEth) external override returns (uint256) {
         if (token != ethToken) {
-            revert("We only load out ETH");
+            revert("We only loan out ETH");
         }
 
+        uint256 amount = amountEth * WEI_MULT;
         uint256 totalHakDeposited = getTotalBalance(hakDeposits[msg.sender]);
+        
         if (totalHakDeposited == 0) {
             revert("no collateral deposited");
         }

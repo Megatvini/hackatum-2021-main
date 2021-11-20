@@ -36,31 +36,34 @@ contract Bank is IBank {
         selfAddress = address(this);
     }
 
-    function calculateSimpleInterest(CurrencyBalance storage currency, uint256 curBlockNumber) private view returns(uint256) {
-        return (curBlockNumber - currency.lastBlockNumber) * currency.interestRate * currency.balance / 100 / 100; // 100 blocks 3 percent
+    function calculateSimpleInterest(CurrencyBalance storage currency) private view returns(uint256) {
+        if (currency.lastBlockNumber == 0) {
+            return 0;
+        } 
+        return (block.number - currency.lastBlockNumber) * currency.interestRate * currency.balance / 100 / 100; // 100 blocks interestRate percent
     }
 
-    function updateCurrencyInterest(CurrencyBalance storage currency, uint256 curBlockNumber) private {
-        currency.interest += calculateSimpleInterest(currency, curBlockNumber);
+    function updateCurrencyInterest(CurrencyBalance storage currency) private {
+        currency.interest += calculateSimpleInterest(currency);
     }
 
-    function addBalance(CurrencyBalance storage currency, uint256 amount, uint256 curBlockNumber) private {
-        updateCurrencyInterest(currency, curBlockNumber);
+    function addBalance(CurrencyBalance storage currency, uint256 amount) private {
+        updateCurrencyInterest(currency);
         currency.balance += amount;
-        currency.lastBlockNumber = curBlockNumber;
+        currency.lastBlockNumber = block.number;
     }
 
-    function removeBalanceAndInterest(CurrencyBalance storage currency, uint256 amount, uint256 curBlockNumber) private returns(uint256) {
-        updateCurrencyInterest(currency, curBlockNumber);
+    function removeBalanceAndInterest(CurrencyBalance storage currency, uint256 amount) private returns(uint256) {
+        updateCurrencyInterest(currency);
         uint256 totalRemoved = amount + currency.interest;
         currency.balance -= amount;
         currency.interest = 0;
-        currency.lastBlockNumber = curBlockNumber;
+        currency.lastBlockNumber = block.number;
         return totalRemoved;
     }
 
-    function getTotalBalance(CurrencyBalance storage currency, uint256 curBlockNumber) private view returns(uint256) {
-        return currency.balance + currency.interest + calculateSimpleInterest(currency, curBlockNumber);
+    function getTotalBalance(CurrencyBalance storage currency) private view returns(uint256) {
+        return currency.balance + currency.interest + calculateSimpleInterest(currency);
     } 
 
     function deposit(address token, uint256 amount) payable external override returns (bool) {
@@ -74,7 +77,7 @@ contract Bank is IBank {
             CurrencyBalance storage currency = ethDeposits[msg.sender];
             currency.interestRate = 3;
             uint256 res = msgValue <= amount ? msgValue : amount;
-            addBalance(currency, res, block.number);
+            addBalance(currency, res);
             emit Deposit(msg.sender, token, res / WEI_MULT);
             return true;
         } else if (token == hakToken) {
@@ -94,7 +97,7 @@ contract Bank is IBank {
 
             CurrencyBalance storage currency = hakDeposits[msg.sender];
             currency.interestRate = 3;
-            addBalance(hakDeposits[msg.sender], amount, block.number);
+            addBalance(hakDeposits[msg.sender], amount);
 
             emit Deposit(msg.sender, token, amount / WEI_MULT);
             return true;
@@ -128,7 +131,7 @@ contract Bank is IBank {
             amount = currency.balance;
         }
 
-        uint256 totalAmount = removeBalanceAndInterest(currency, amount, block.number);
+        uint256 totalAmount = removeBalanceAndInterest(currency, amount);
         if (token == ethToken) {
             msg.sender.transfer(totalAmount / WEI_MULT);
         } else {
@@ -146,7 +149,7 @@ contract Bank is IBank {
             revert("We only load out ETH");
         }
 
-        uint256 totalHakDeposited = getTotalBalance(hakDeposits[msg.sender], block.number);
+        uint256 totalHakDeposited = getTotalBalance(hakDeposits[msg.sender]);
         if (totalHakDeposited == 0) {
             revert("no collateral deposited");
         }
@@ -169,9 +172,9 @@ contract Bank is IBank {
 
         CurrencyBalance storage ethLoan = ethLoans[msg.sender];
         ethLoan.interestRate = 5;
-        addBalance(ethLoan, amount, block.number);
+        addBalance(ethLoan, amount);
 
-        totalHakDeposited = getTotalBalance(hakDeposits[msg.sender], block.number);
+        totalHakDeposited = getTotalBalance(hakDeposits[msg.sender]);
         uint256 newCollateralRatio = totalHakDeposited * hakPriceInWei * 10_000 / (ethLoan.balance + ethLoan.interest) / WEI_MULT;
 
         msg.sender.transfer(amount / WEI_MULT);
@@ -194,11 +197,11 @@ contract Bank is IBank {
 
         CurrencyBalance storage ethBalance = ethLoans[msg.sender];
 
-        if (getTotalBalance(ethBalance, block.number) == 0) {
+        if (getTotalBalance(ethBalance) == 0) {
             revert("nothing to repay");
         }
 
-        updateCurrencyInterest(ethBalance, block.number);
+        updateCurrencyInterest(ethBalance);
 
         if (amount >= ethBalance.interest) {
             amount -= ethBalance.interest;
@@ -237,10 +240,10 @@ contract Bank is IBank {
             revert("healty position");
         }
 
-        uint256 collateralToReturn = getTotalBalance(hakDeposits[account], block.number);
+        uint256 collateralToReturn = getTotalBalance(hakDeposits[account]);
         uint256 hakPriceInWei = IPriceOracle(priceOracle).getVirtualPrice(hakToken); 
 
-        uint256 ethNeeded = hakPriceInWei * collateralToReturn / WEI_MULT / WEI_MULT;
+        uint256 ethNeeded = hakPriceInWei / WEI_MULT * collateralToReturn / WEI_MULT;
 
         if (ethNeeded > msg.value) {
             revert("insufficient ETH sent by liquidator");
@@ -248,7 +251,7 @@ contract Bank is IBank {
 
         IERC20(hakToken).approve(msg.sender, collateralToReturn / WEI_MULT);
 
-        uint256 amountSentBack = msg.value - ethNeeded; // + getTotalBalance(ethDeposits[account], block.number);
+        uint256 amountSentBack = msg.value * WEI_MULT - ethNeeded * WEI_MULT + getTotalBalance(ethDeposits[account]);
         msg.sender.transfer(amountSentBack / WEI_MULT);
 
         emit Liquidate(msg.sender, account, hakToken, collateralToReturn / WEI_MULT, amountSentBack / WEI_MULT);
@@ -261,8 +264,8 @@ contract Bank is IBank {
         }
 
         uint256 hakPriceInWei = IPriceOracle(priceOracle).getVirtualPrice(hakToken); // * 1_000_000_000_000_000_000
-        uint256 totalHakDepositedWei = getTotalBalance(hakDeposits[account], block.number);
-        uint256 totalEthBorrowedWei = getTotalBalance(ethLoans[account], block.number);
+        uint256 totalHakDepositedWei = getTotalBalance(hakDeposits[account]);
+        uint256 totalEthBorrowedWei = getTotalBalance(ethLoans[account]);
 
         if (totalEthBorrowedWei == 0) {
             return type(uint256).max;
@@ -273,9 +276,9 @@ contract Bank is IBank {
 
     function getBalance(address token) view public override returns (uint256) {
         if (token == ethToken) {
-            return getTotalBalance(ethDeposits[msg.sender], block.number) / WEI_MULT;
+            return getTotalBalance(ethDeposits[msg.sender]) / WEI_MULT;
         } else if (token == hakToken) {
-            return getTotalBalance(hakDeposits[msg.sender], block.number) / WEI_MULT;
+            return getTotalBalance(hakDeposits[msg.sender]) / WEI_MULT;
         } else {
             revert("token not supported");
         }

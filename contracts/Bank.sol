@@ -114,6 +114,10 @@ contract Bank is IBank {
             revert("amount exceeds balance");
         }
 
+        if (token == hakToken && amount > currency.balance - hakCollaterals[msg.sender]) {
+            revert("amount exceeds balance");
+        }
+
         if (amount == 0) {
             amount = currency.balance;
         }
@@ -122,7 +126,7 @@ contract Bank is IBank {
         if (token == ethToken) {
             msg.sender.transfer(totalAmount / WEI_MULT);
         } else {
-            IERC20(hakToken).approve(msg.sender, totalAmount / WEI_MULT);
+            IERC20(hakToken).transfer(msg.sender, totalAmount / WEI_MULT);
         }
         
         emit Withdraw(msg.sender, token, totalAmount / WEI_MULT);
@@ -227,20 +231,18 @@ contract Bank is IBank {
         }
 
         uint256 collateralToReturn = getTotalBalance(hakDeposits[account]);
-        uint256 hakPriceInWei = IPriceOracle(priceOracle).getVirtualPrice(hakToken); 
-
-        uint256 ethNeeded = hakPriceInWei / WEI_MULT * collateralToReturn / WEI_MULT;
+        uint256 ethNeeded = (getTotalBalance(ethLoans[account]) - getTotalBalance(ethDeposits[account])) / WEI_MULT;
 
         if (ethNeeded > msg.value) {
             revert("insufficient ETH sent by liquidator");
         }
 
-        IERC20(hakToken).approve(msg.sender, collateralToReturn / WEI_MULT);
+        uint256 amountSentBack = msg.value - ethNeeded; 
+        msg.sender.transfer(amountSentBack);
+        
+        IERC20(hakToken).transfer(msg.sender, collateralToReturn / WEI_MULT);
 
-        uint256 amountSentBack = msg.value * WEI_MULT - ethNeeded * WEI_MULT + getTotalBalance(ethDeposits[account]);
-        msg.sender.transfer(amountSentBack / WEI_MULT);
-
-        emit Liquidate(msg.sender, account, hakToken, collateralToReturn / WEI_MULT, amountSentBack / WEI_MULT);
+        emit Liquidate(msg.sender, account, hakToken, collateralToReturn / WEI_MULT, amountSentBack);
         return true;
     }
 

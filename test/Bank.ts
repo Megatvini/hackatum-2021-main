@@ -108,7 +108,7 @@ describe("Bank contract", function () {
     it("without balance", async function () {
       let amount = BigNumber.from(1337);
       await expect(bank1.withdraw(ethMagic, amount)).to.be.revertedWith("no balance");
-      // await expect(bank1.withdraw(hak.address, amount)).to.be.revertedWith("no balance");
+      await expect(bank1.withdraw(hak.address, amount)).to.be.revertedWith("no balance");
     });
 
     it("balance too low", async function () {
@@ -164,7 +164,7 @@ describe("Bank contract", function () {
       await bank1.deposit(ethMagic, amount, {value: amount});
       await mineBlocks(100);
       expect(await bank1.getBalance(ethMagic)).equals(10300);
-
+ 
       // deposit again to trigger account update, wait 100 blocks and withdraw all
       await bank1.deposit(ethMagic, amount, {value: amount});
       await mineBlocks(99);

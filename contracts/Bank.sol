@@ -19,10 +19,9 @@ contract Bank is IBank {
 
     function deposit(address token, uint256 amount) payable external override returns (bool) {
         if (token == 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE) {
-
             ethInterest[msg.sender] = getTotalInterest(msg.sender, block.number);
             ethLastBlockNumber[msg.sender] = block.number;
-            ethBalances[msg.sender] += msg.value;
+            ethBalances[msg.sender] += msg.value <= amount ? msg.value : amount;
 
             emit Deposit(msg.sender, token, msg.value);
             return true;

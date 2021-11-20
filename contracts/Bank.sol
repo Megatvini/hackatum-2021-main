@@ -91,6 +91,7 @@ contract Bank is IBank {
             ethBalances[msg.sender] -= amount;
             ethInterest[msg.sender] = 0;
 
+            msg.sender.transfer(amount + totalInterest);
             emit Withdraw(msg.sender, token, amount + totalInterest);
 
             return amount + totalInterest;
